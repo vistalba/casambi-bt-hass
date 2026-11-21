@@ -155,9 +155,10 @@ class CasambiApi:
         backoff = RECONNECT_BACKOFF_START
         protocol_error = False
 
-        # The task starts eagerly, inside the library's disconnect callback,
-        # where the library still reports itself connected and would return
-        # from reconnect() at once. Let it finish tearing down first.
+        # Safety margin: the library may still report itself connected while
+        # its disconnect callback is running. Yield once so the teardown
+        # finishes before we check the connection state. The reconnect task
+        # is also created with eager_start=False to avoid this race.
         await asyncio.sleep(0)
 
         while True:
@@ -335,7 +336,15 @@ class CasambiApi:
             return
         if self._reconnect_task is None or self._reconnect_task.done():
             self._reconnect_task = self.conf_entry.async_create_background_task(
-                self.hass, self.reconnect(), "Reconnect"
+                self.hass,
+                self.reconnect(),
+                "Reconnect",
+                # Do not start the task synchronously inside the library's
+                # disconnect callback. The library still reports itself as
+                # connected while running that callback, so an eager start
+                # would make Casambi.reconnect() return without doing
+                # anything. See https://github.com/lkempf/casambi-bt-hass/issues/170.
+                eager_start=False,
             )
 
 
