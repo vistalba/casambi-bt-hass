@@ -177,7 +177,9 @@ class CasambiApi:
                 self._notify_connection_state()
                 protocol_error = False
                 break
-            except BluetoothError:
+            except (BluetoothError, TimeoutError):
+                # Some bleak backends (e.g. ESPHome proxies) raise a bare
+                # TimeoutError that casambi-bt doesn't wrap. Keep retrying.
                 _LOGGER.debug(
                     "Connecting failed due to bluetooth error. Retrying...",
                     exc_info=True,
@@ -191,13 +193,19 @@ class CasambiApi:
             except asyncio.CancelledError:
                 _LOGGER.debug("Reconnect task cancelled.")
                 break
-            except ProtocolError as err:
-                # We retry once on Protocol errors to make sure they aren't permanent.
+            except ProtocolError:
+                # Protocol errors during a reconnect are usually caused by a
+                # broken link. Giving up would leave the network unavailable
+                # until the entry is reloaded, so keep retrying slowly instead.
                 if not protocol_error:
-                    _LOGGER.debug("Retrying once on protocol error.", exc_info=True)
+                    _LOGGER.debug("Retrying on protocol error.", exc_info=True)
                     protocol_error = True
                 else:
-                    raise HomeAssistantError from err
+                    _LOGGER.warning(
+                        "Repeated protocol error during reconnect. Retrying slowly.",
+                        exc_info=True,
+                    )
+                    backoff = RECONNECT_BACKOFF_MAX
             except Exception as err:  # pylint: disable=broad-except
                 raise HomeAssistantError from err
 
@@ -356,7 +364,7 @@ class CasambiProxy:
             async def async_wrapper(*args, **kwargs):
                 try:
                     return await attr(*args, **kwargs)
-                except BluetoothError:
+                except (BluetoothError, TimeoutError):
                     _LOGGER.debug("Bluetooth error during write.", exc_info=True)
                     _LOGGER.info("Triggering reconnect after write failed.")
                     self._api._schedule_reconnect()  # noqa: SLF001
