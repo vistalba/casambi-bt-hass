@@ -92,5 +92,17 @@
     "write_failed": {
       "message": "Sending the command to the Casambi network failed."
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "status": {
+        "name": "Status"
+      }
+    },
+    "number": {
+      "vertical": {
+        "name": "Vertical"
+      }
+    }
   }
 }
