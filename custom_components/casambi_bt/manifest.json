@@ -17,5 +17,5 @@
   "issue_tracker": "https://github.com/lkempf/casambi-bt-hass/issues",
   "loggers": ["custom_components.casambi_bt", "CasambiBt"],
   "requirements": ["casambi-bt==0.4.0b5"],
-  "version": "0.3.0-beta8"
+  "version": "0.3.0-beta9"
 }
