@@ -147,7 +147,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     info = await _validate_input(self.hass, user_input)
                 except NetworkNotFoundError:
                     errors["base"] = "cannot_connect"
-                except AuthenticationError:
+                except AuthenticationError as err:
+                    # The error carries the http status code and the cloud
+                    # response which tells apart a wrong password (401) from
+                    # a rate limit (403) or other issues.
+                    _LOGGER.warning("Casambi login failed: %s", err)
                     errors["base"] = "invalid_auth"
                 except Exception:  # pylint: disable=broad-except
                     _LOGGER.exception("Unexpected exception")
@@ -196,7 +200,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await _validate_input(self.hass, data)
             except NetworkNotFoundError:
                 errors["base"] = "cannot_connect"
-            except AuthenticationError:
+            except AuthenticationError as err:
+                _LOGGER.warning("Casambi login failed: %s", err)
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
