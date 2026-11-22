@@ -112,11 +112,11 @@ def _async_remove_stale_devices(
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:
-    """Migrate old config entries."""
-    if entry.version > 2:
-        # Downgraded from a future version which we can't handle.
-        return False
+    """Migrate old config entries.
 
+    Home Assistant itself refuses entries of a newer version than the
+    config flow, so only older versions reach this function.
+    """
     if entry.version == 1:
         # Version 2 moved the group import setting to the options because
         # it doesn't affect the connection.
