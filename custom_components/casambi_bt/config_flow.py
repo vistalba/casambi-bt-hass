@@ -42,7 +42,13 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from . import CasambiConfigEntry, get_cache_dir, is_rate_limited, login_status
+from . import (
+    CasambiConfigEntry,
+    cache_uuid,
+    get_cache_dir,
+    is_rate_limited,
+    login_status,
+)
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 from .migration import migrate_legacy_cache
 
@@ -130,9 +136,7 @@ async def _validate_input(
                 partial(shutil.rmtree, temp_dir, ignore_errors=True)
             )
 
-    # The library keys its cache directory by the mac without colons in
-    # lower case.
-    uuid = bt_device.address.replace(":", "").lower()
+    uuid = cache_uuid(bt_device.address)
     await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
 
     casa = Casambi(client, get_cache_dir(hass))

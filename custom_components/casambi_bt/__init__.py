@@ -26,6 +26,7 @@ from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
+    ConfigEntryError,
     ConfigEntryNotReady,
     HomeAssistantError,
 )
@@ -51,13 +52,21 @@ _LOGGER: Final = logging.getLogger(__name__)
 _LOGIN_STATUS_REGEX: Final = re.compile(r"Login failed: (\d{3})")
 # The Casambi cloud answers 403 when it refuses new sessions for a while.
 _RATE_LIMIT_STATUSES: Final = frozenset({403, 429})
+_CACHE_UUID_REGEX: Final = re.compile(r"[0-9a-f]{12}")
 
 type CasambiConfigEntry = ConfigEntry[CasambiApi]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
-    uuid = entry.data[CONF_ADDRESS].replace(":", "").lower()
+    try:
+        uuid = cache_uuid(entry.data[CONF_ADDRESS])
+    except ValueError as err:
+        raise ConfigEntryError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_address",
+            translation_placeholders={"address": entry.data[CONF_ADDRESS]},
+        ) from err
     await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
 
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
@@ -154,14 +163,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> 
 
 async def async_remove_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> None:
     """Clean up persistent data when the config entry is deleted."""
-    uuid = entry.data[CONF_ADDRESS].replace(":", "").lower()
+    ir.async_delete_issue(hass, DOMAIN, f"no_connectable_scanner_{entry.entry_id}")
+    try:
+        uuid = cache_uuid(entry.data[CONF_ADDRESS])
+    except ValueError:
+        # Never derive a path to delete from an unexpected value.
+        _LOGGER.warning("Not removing the cache of an invalid address")
+        return
     cache_dir = get_cache_dir(hass) / uuid
 
     def _remove_cache() -> None:
         shutil.rmtree(cache_dir, ignore_errors=True)
 
     await hass.async_add_executor_job(_remove_cache)
-    ir.async_delete_issue(hass, DOMAIN, f"no_connectable_scanner_{entry.entry_id}")
 
 
 async def async_remove_config_entry_device(
@@ -171,6 +185,19 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Allow removing a device that is no longer part of this Casambi network."""
     return not device_entry.identifiers & _live_identifiers(config_entry.runtime_data)
+
+
+def cache_uuid(address: str) -> str:
+    """Return the name casambi-bt uses for the cache of a network.
+
+    It is the mac address without colons in lower case. The value is used
+    as a path below the cache directory, so anything but a mac address is
+    rejected.
+    """
+    uuid = address.replace(":", "").lower()
+    if not _CACHE_UUID_REGEX.fullmatch(uuid):
+        raise ValueError(f"Invalid address {address!r}")
+    return uuid
 
 
 def login_status(err: AuthenticationError) -> int | None:
