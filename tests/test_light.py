@@ -458,3 +458,105 @@ async def test_xy_only_unit_is_light(
     assert hass.states.get(entity_id).attributes["supported_color_modes"] == [
         ColorMode.XY
     ]
+
+
+async def test_turn_on_off_unit_with_color_only(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Setting only a color on an off unit must turn it on."""
+    state = make_state(dimmer=0, rgb=(0, 0, 0), onoff=False)
+    unit = make_unit(
+        1,
+        [UnitControlType.ONOFF, UnitControlType.DIMMER, UnitControlType.RGB],
+        state=state,
+        on=False,
+    )
+    mock_casambi.units = [unit]
+    calls: list[str] = []
+    mock_casambi.setUnitState = AsyncMock(
+        side_effect=lambda *_: calls.append("setUnitState")
+    )
+    mock_casambi.turnOn = AsyncMock(side_effect=lambda *_: calls.append("turnOn"))
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+    assert hass.states.get(entity_id).state == "off"
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "rgb_color": (255, 0, 0)},
+        blocking=True,
+    )
+
+    sent = mock_casambi.setUnitState.await_args.args[1]
+    assert sent.rgb == (255, 0, 0)
+    assert sent.onoff is True
+    # The level of the off unit is unknown, so the last level is restored
+    # after the color is set.
+    assert calls == ["setUnitState", "turnOn"]
+
+
+async def test_turn_on_on_unit_with_color_keeps_level(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Changing the color of an on unit must not touch its level."""
+    unit = make_unit(
+        1,
+        [UnitControlType.DIMMER, UnitControlType.RGB],
+        state=make_state(dimmer=80, rgb=(0, 0, 0)),
+    )
+    mock_casambi.units = [unit]
+    mock_casambi.setUnitState = AsyncMock()
+    mock_casambi.turnOn = AsyncMock()
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "rgb_color": (0, 255, 0)},
+        blocking=True,
+    )
+
+    assert mock_casambi.setUnitState.await_args.args[1].dimmer == 80
+    mock_casambi.turnOn.assert_not_awaited()
+
+
+async def test_turn_on_off_group_with_color_only(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    group_config_entry: MockConfigEntry,
+) -> None:
+    """Setting only a color on an off group must turn it on, not off."""
+    unit = make_unit(
+        1,
+        [UnitControlType.DIMMER, UnitControlType.RGB],
+        state=make_state(dimmer=0, rgb=(0, 0, 0)),
+        on=False,
+    )
+    mock_casambi.units = [unit]
+    mock_casambi.groups = [Group(groudId=7, name="Living", units=[unit])]
+    mock_casambi.setColor = AsyncMock()
+    mock_casambi.setLevel = AsyncMock()
+    mock_casambi.turnOn = AsyncMock()
+
+    await _setup(hass, group_config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-group-7")
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "rgb_color": (1, 2, 3)},
+        blocking=True,
+    )
+
+    group = mock_casambi.groups[0]
+    mock_casambi.setColor.assert_awaited_once_with(group, (1, 2, 3))
+    mock_casambi.setLevel.assert_not_awaited()
+    mock_casambi.turnOn.assert_awaited_once_with(group)

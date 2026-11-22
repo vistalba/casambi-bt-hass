@@ -266,10 +266,23 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             state.colorsource = ColorSource.XY
             set_state = True
 
-        if set_state:
-            await self._api.casa.setUnitState(unit, state)
-        else:
-            await self._api.casa.turnOn(self._obj)
+        if not set_state:
+            await self._api.casa.turnOn(unit)
+            return
+
+        # The state is sent as a whole, so it must say "on". The copy of an
+        # off unit carries onoff=False and a level of 0, which would keep the
+        # unit off although only the color was meant to change.
+        if unit.unitType.get_control(UnitControlType.ONOFF) is not None:
+            state.onoff = True
+        await self._api.casa.setUnitState(unit, state)
+        if (
+            ATTR_BRIGHTNESS not in kwargs
+            and not state.dimmer
+            and unit.unitType.get_control(UnitControlType.DIMMER) is not None
+        ):
+            # No level known: restore the last level like a plain turn on.
+            await self._api.casa.turnOn(unit)
 
 
 class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
@@ -388,7 +401,10 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         if not was_set:
             await self._api.casa.turnOn(self._obj)
         elif ATTR_BRIGHTNESS not in kwargs:
-            # Sync brightness for group so that everything turns on.
-            # This might be a bit confusing because the rest isn't synced.
-            if self.brightness is not None:
-                await self._api.casa.setLevel(self._obj, self.brightness)
+            if level := self.brightness:
+                # Sync the level of the group so that all units turn on.
+                await self._api.casa.setLevel(self._obj, level)
+            else:
+                # The group is off: setting the color alone keeps it off and
+                # syncing a level of 0 would turn it off again.
+                await self._api.casa.turnOn(self._obj)
