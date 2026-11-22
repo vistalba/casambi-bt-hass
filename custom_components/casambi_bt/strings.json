@@ -37,6 +37,16 @@
         "data_description": {
           "password": "Password of the Casambi network, not of your Casambi account."
         }
+      },
+      "reconfigure": {
+        "title": "Change the password of {name}",
+        "description": "Enter the new password of the Casambi network {name}.",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "password": "Password of the Casambi network, not of your Casambi account."
+        }
       }
     },
     "error": {
@@ -49,7 +59,8 @@
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
       "bluetooth_error": "No connectable bluetooth adapter or proxy is available. Set up bluetooth in Home Assistant first.",
       "not_supported": "The discovered device does not accept connections.",
-      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
   },
   "options": {

@@ -37,6 +37,16 @@
         "data_description": {
           "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account."
         }
+      },
+      "reconfigure": {
+        "title": "Wachtwoord van {name} wijzigen",
+        "description": "Voer het nieuwe wachtwoord van het Casambi netwerk {name} in.",
+        "data": {
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account."
+        }
       }
     },
     "error": {
@@ -49,7 +59,8 @@
       "already_configured": "Apparaat is al geconfigureerd",
       "bluetooth_error": "Er is geen bluetooth adapter of proxy beschikbaar die verbindingen ondersteunt. Stel eerst bluetooth in Home Assistant in.",
       "not_supported": "Het gevonden apparaat accepteert geen verbindingen.",
-      "reauth_successful": "Herauthenticatie geslaagd"
+      "reauth_successful": "Herauthenticatie geslaagd",
+      "reconfigure_successful": "Herconfiguratie geslaagd"
     }
   },
   "options": {

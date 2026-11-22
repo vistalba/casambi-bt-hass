@@ -284,6 +284,33 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the password of a configured network.
+
+        The address identifies the network and is the unique id of the
+        entry, so a different network has to be added as a new entry.
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = await self._async_try_connect_for_entry(
+                entry, user_input[CONF_PASSWORD]
+            )
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    entry, data_updates=user_input
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=PASSWORD_SCHEMA,
+            description_placeholders={"name": entry.title},
+            errors=errors,
+        )
+
 
 class CasambiOptionsFlow(OptionsFlowWithReload):
     """Handle the options of a Casambi network."""

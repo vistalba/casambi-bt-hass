@@ -348,3 +348,39 @@ async def test_options_flow_reloads(
     assert config_entry.options == {CONF_IMPORT_GROUPS: True}
     assert config_entry.state is ConfigEntryState.LOADED
     assert mock_casambi.connect.await_count == 2
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_reconfigure_flow(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Reconfigure must validate the new password and reload the entry."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    mock_casambi.connect = AsyncMock(side_effect=[BluetoothError(), None])
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_PASSWORD: "new-password"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert config_entry.data[CONF_PASSWORD] == "secret-password"
+
+    mock_casambi.connect = AsyncMock()
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_PASSWORD: "new-password"}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert config_entry.data[CONF_PASSWORD] == "new-password"
+    assert config_entry.state is ConfigEntryState.LOADED
