@@ -128,6 +128,7 @@ async def test_user_flow_invalid_address(hass: HomeAssistant) -> None:
     ("error", "expected"),
     [
         (AuthenticationError("Login failed: 401"), "invalid_auth"),
+        (AuthenticationError("Login failed: 403\nlater"), "rate_limited"),
         (BluetoothError(), "cannot_connect"),
         (RuntimeError("boom"), "unknown"),
     ],

@@ -32,7 +32,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from . import CasambiConfigEntry, get_cache_dir
+from . import CasambiConfigEntry, get_cache_dir, is_rate_limited, login_status
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 from .migration import migrate_legacy_cache
 
@@ -145,11 +145,10 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             title = await _validate_input(self.hass, address, password)
         except AuthenticationError as err:
-            # The error carries the http status code and the cloud
-            # response which tells apart a wrong password (401) from
-            # a rate limit (403) or other issues.
-            _LOGGER.warning("Casambi login failed: %s", err)
-            errors["base"] = "invalid_auth"
+            # Only log the status: the error also carries the response body
+            # of the cloud.
+            _LOGGER.warning("Casambi login failed with status %s", login_status(err))
+            errors["base"] = "rate_limited" if is_rate_limited(err) else "invalid_auth"
         except CasambiBtError:
             _LOGGER.debug("Connecting to %s failed", address, exc_info=True)
             errors["base"] = "cannot_connect"
