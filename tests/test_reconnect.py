@@ -164,6 +164,14 @@ async def test_reconnect_auth_error_starts_reauth(
     assert flows[0]["context"]["source"] == "reauth"
     assert not api.available
 
+    # Advertisements and failed writes must not trigger further logins
+    # with the rejected credentials until the entry is reloaded.
+    for _ in range(3):
+        api._bluetooth_callback(MagicMock(connectable=True), MagicMock())  # noqa: SLF001
+        api._schedule_reconnect()  # noqa: SLF001
+        await drain(hass, rounds=3)
+    mock_casambi.reconnect.assert_awaited_once()
+
 
 @pytest.mark.parametrize(
     "errors",

@@ -198,6 +198,10 @@ class CasambiApi:
         self._link_up = False
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
         self._reconnect_task: asyncio.Task[None] | None = None
+        # Set when the network rejected the credentials. No reconnect is
+        # attempted until the entry is reloaded (e.g. by a successful
+        # reauth), otherwise every advertisement would trigger a login.
+        self._auth_failed = False
 
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
@@ -334,6 +338,7 @@ class CasambiApi:
                     "Authentication to Casambi network %s failed while reconnecting",
                     self.address,
                 )
+                self._auth_failed = True
                 self.conf_entry.async_start_reauth(self.hass)
                 break
             except Exception as err:  # pylint: disable=broad-except
@@ -528,6 +533,8 @@ class CasambiApi:
             self._schedule_reconnect()
 
     def _schedule_reconnect(self) -> None:
+        if self._auth_failed:
+            return
         # We assume that a reconnect task is only cancelled when disconnected.
         # So never reconnect when the disconnect task has been cancelled.
         if self._reconnect_task is not None and self._reconnect_task.cancelled():
