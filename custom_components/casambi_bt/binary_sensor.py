@@ -27,11 +27,6 @@ NETWORK_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
 )
 
 
-async def async_unload_entry(_hass: HomeAssistant, _entry: CasambiConfigEntry) -> bool:
-    """Support unloading of entry."""
-    return True
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: CasambiConfigEntry,
