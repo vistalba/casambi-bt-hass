@@ -24,7 +24,6 @@ from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
-    ConfigEntryError,
     ConfigEntryNotReady,
     HomeAssistantError,
 )
@@ -174,7 +173,10 @@ class CasambiApi:
                 f"Failed to authenticate to network {self.address}"
             ) from err
         except Exception as err:  # pylint: disable=broad-except
-            raise ConfigEntryError(
+            # Most failures here are transient (cloud hiccups, a network
+            # update in progress, flaky bluetooth proxies). Retrying keeps
+            # the entry alive instead of failing it until a manual reload.
+            raise ConfigEntryNotReady(
                 f"Unexpected error creating network {self.address}"
             ) from err
 

@@ -2,7 +2,8 @@
 
 from unittest.mock import AsyncMock, patch
 
-from CasambiBt.errors import AuthenticationError, BluetoothError
+from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkUpdateError
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt import async_remove_entry
@@ -40,15 +41,18 @@ async def test_setup_and_unload(
     assert config_entry.entry_id not in hass.data[DOMAIN]
 
 
-async def test_setup_retry_on_bluetooth_error(
+@pytest.mark.parametrize(
+    "error", [BluetoothError(), NetworkUpdateError(), RuntimeError("boom")]
+)
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_setup_retry_on_connect_error(
     hass: HomeAssistant,
     mock_casambi: MockCasambi,
-    mock_bluetooth: AsyncMock,
     config_entry: MockConfigEntry,
-    enable_bluetooth: None,
+    error: Exception,
 ) -> None:
-    """A bluetooth error during initial connect must schedule a setup retry."""
-    mock_casambi.connect = AsyncMock(side_effect=BluetoothError())
+    """Errors during the initial connect must schedule a setup retry."""
+    mock_casambi.connect = AsyncMock(side_effect=error)
 
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)
