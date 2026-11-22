@@ -54,7 +54,8 @@
       "invalid_address": "Het bluetooth MAC-adres van het netwerk is ongeldig.",
       "invalid_auth": "Ongeldige authenticatie",
       "unknown": "Onverwachte fout",
-      "rate_limited": "De Casambi cloud weigert tijdelijk nieuwe aanmeldingen. Wacht een paar minuten en probeer het opnieuw."
+      "rate_limited": "De Casambi cloud weigert tijdelijk nieuwe aanmeldingen. Wacht een paar minuten en probeer het opnieuw.",
+      "cloud_unreachable": "De Casambi cloud is niet bereikbaar, daardoor kan het wachtwoord niet worden gecontroleerd. Controleer de internetverbinding en probeer het opnieuw."
     },
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd",

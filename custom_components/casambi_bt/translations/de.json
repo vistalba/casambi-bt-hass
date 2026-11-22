@@ -54,7 +54,8 @@
       "invalid_address": "Die Bluetooth MAC Adresse des Netzwerks ist ungültig.",
       "invalid_auth": "Anmeldung ungültig",
       "unknown": "Unerwarteter Fehler",
-      "rate_limited": "Die Casambi Cloud lehnt neue Anmeldungen vorübergehend ab. Warte einige Minuten und versuche es erneut."
+      "rate_limited": "Die Casambi Cloud lehnt neue Anmeldungen vorübergehend ab. Warte einige Minuten und versuche es erneut.",
+      "cloud_unreachable": "Die Casambi Cloud ist nicht erreichbar, daher kann das Passwort nicht geprüft werden. Prüfe die Internetverbindung und versuche es erneut."
     },
     "abort": {
       "already_configured": "Netzwerk ist bereits konfiguriert",
