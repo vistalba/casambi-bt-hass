@@ -49,4 +49,4 @@ class CasambiScene(SceneEntity, CasambiNetworkEntity):
         """Activate a scene."""
         _LOGGER.debug("Switching to scene %s", self.name)
         brightness = kwargs.get(ATTR_BRIGHTNESS, 0xFF)
-        await self._api.casa.switchToScene(self._obj, brightness)
+        await self._api.async_send(self._api.casa.switchToScene, self._obj, brightness)
