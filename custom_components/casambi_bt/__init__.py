@@ -27,6 +27,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
@@ -51,6 +52,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
+
+    # Register the network (hub) device up front. Unit devices reference it
+    # through via_device_id, which must resolve no matter in which order the
+    # platforms are set up.
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, api.casa.networkId)},
+        connections={(dr.CONNECTION_BLUETOOTH, api.address)},
+        manufacturer="Casambi",
+        model="Network",
+        name=api.casa.networkName,
+    )
 
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
