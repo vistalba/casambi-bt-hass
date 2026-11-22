@@ -118,3 +118,36 @@ async def test_turn_on_unit_with_color(
     assert sent.rgb == (1, 2, 3)
     assert sent.dimmer == 200
     assert sent.colorsource is ColorSource.RGB
+
+
+async def test_turn_on_group_with_xy_color(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    group_config_entry: MockConfigEntry,
+) -> None:
+    """Turning on a group of xy lights with a color must set the color."""
+    unit = make_unit(
+        1,
+        [UnitControlType.DIMMER, UnitControlType.XY],
+        state=make_state(dimmer=100, xy=(0.3, 0.3)),
+    )
+    mock_casambi.units = [unit]
+    mock_casambi.groups = [Group(groudId=7, name="Living", units=[unit])]
+    mock_casambi.setColorXY = AsyncMock()
+    mock_casambi.setLevel = AsyncMock()
+    mock_casambi.turnOn = AsyncMock()
+
+    await _setup(hass, group_config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-group-7")
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "xy_color": (0.4, 0.5)},
+        blocking=True,
+    )
+
+    group = mock_casambi.groups[0]
+    mock_casambi.setColorXY.assert_awaited_once_with(group, (0.4, 0.5))
+    mock_casambi.setLevel.assert_awaited_once_with(group, 100)
+    mock_casambi.turnOn.assert_not_awaited()

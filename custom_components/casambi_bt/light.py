@@ -362,6 +362,9 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
             await self._api.casa.setColor(self._obj, rgb)
             await self._api.casa.setWhite(self._obj, w)
             was_set = True
+        elif ATTR_XY_COLOR in kwargs:
+            await self._api.casa.setColorXY(self._obj, kwargs[ATTR_XY_COLOR])
+            was_set = True
 
         if not was_set:
             await self._api.casa.turnOn(self._obj)
