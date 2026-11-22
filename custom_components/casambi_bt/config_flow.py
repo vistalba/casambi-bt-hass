@@ -23,6 +23,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 
 from . import get_cache_dir
 from .const import CONF_IMPORT_GROUPS, DOMAIN
+from .migration import migrate_legacy_cache
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,11 +57,23 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
         raise NetworkNotFoundError
 
     # The library keys its cache directory by the mac without colons in
-    # lower case. Passing the raw address made this a silent no-op, so the
-    # flow reused a cached cloud session and never actually validated the
-    # entered password.
-    await casa.invalidateCache(bt_device.address.replace(":", "").lower())
-    await casa.connect(bt_device, data[CONF_PASSWORD])
+    # lower case.
+    uuid = bt_device.address.replace(":", "").lower()
+    await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
+
+    try:
+        # Connect with the existing cache first. A valid cached session
+        # skips the cloud login, which keeps the flow working even while
+        # the cloud refuses new sessions.
+        await casa.connect(bt_device, data[CONF_PASSWORD])
+    except AuthenticationError as err:
+        # The cached session is missing, expired or rejected. Drop the
+        # cache and retry with a genuine cloud login so a wrong password
+        # is still reported to the user.
+        _LOGGER.warning("Login with cached session failed, retrying fresh: %s", err)
+        await casa.invalidateCache(uuid)
+        casa = Casambi(client, get_cache_dir(hass))
+        await casa.connect(bt_device, data[CONF_PASSWORD])
 
     network_name = casa.networkName
 
