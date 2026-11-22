@@ -29,6 +29,44 @@ def _entity_id(hass: HomeAssistant, unique_id: str) -> str:
     return entity_id
 
 
+@pytest.mark.parametrize(
+    ("colorsource", "expected"),
+    [
+        (ColorSource.TEMPERATURE, ColorMode.COLOR_TEMP),
+        (ColorSource.RGB, ColorMode.RGB),
+        (ColorSource.XY, ColorMode.XY),
+        (None, ColorMode.RGB),
+    ],
+)
+async def test_color_mode_follows_color_source(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+    colorsource: ColorSource | None,
+    expected: ColorMode,
+) -> None:
+    """The reported color mode must follow the active color source."""
+    state = make_state(dimmer=255, rgb=(255, 0, 0), temperature=3000, xy=(0.3, 0.3))
+    if colorsource is not None:
+        state.colorsource = colorsource
+    unit = make_unit(
+        1,
+        [
+            UnitControlType.DIMMER,
+            UnitControlType.RGB,
+            UnitControlType.TEMPERATURE,
+            UnitControlType.XY,
+        ],
+        state=state,
+    )
+    mock_casambi.units = [unit]
+
+    await _setup(hass, config_entry)
+
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+    assert hass.states.get(entity_id).attributes[ATTR_COLOR_MODE] == expected
+
+
 async def test_group_rgbw_without_state_values(
     hass: HomeAssistant,
     mock_casambi: MockCasambi,
