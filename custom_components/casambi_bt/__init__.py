@@ -197,7 +197,7 @@ class CasambiApi:
         # itself as connected, so the link state is tracked here instead.
         self._link_up = False
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
-        self._reconnect_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task[None] | None = None
 
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
@@ -416,7 +416,7 @@ class CasambiApi:
             return self._casa.units
 
         return filter(
-            lambda u: any(uc.type in control_types for uc in u.unitType.controls),  # type: ignore[arg-type]
+            lambda u: any(uc.type in control_types for uc in u.unitType.controls),
             self._casa.units,
         )
 
@@ -563,7 +563,7 @@ class CasambiProxy:
 
         if inspect.iscoroutinefunction(attr):
 
-            async def async_wrapper(*args, **kwargs):
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     return await attr(*args, **kwargs)
                 except BluetoothError as err:
