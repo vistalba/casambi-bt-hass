@@ -187,6 +187,7 @@ class CasambiApi:
         """Start reconnection attempt to the Casmabi network."""
         backoff = RECONNECT_BACKOFF_START
         protocol_error = False
+        unexpected_error_logged = False
 
         # Safety margin: the library may still report itself connected while
         # its disconnect callback is running. Yield once so the teardown
@@ -214,7 +215,6 @@ class CasambiApi:
                     )
                 self._link_up = True
                 self._notify_connection_state()
-                protocol_error = False
                 break
             except BluetoothError:
                 _LOGGER.debug(
@@ -225,20 +225,38 @@ class CasambiApi:
                 # Sometimes HA notifications seem not to work.
                 # We are still registered for HA notifications but retrying very seldomly should be fine.
                 backoff = max(backoff, 60)
-            except AuthenticationError as err:
-                raise HomeAssistantError from err
-            except asyncio.CancelledError:
-                _LOGGER.debug("Reconnect task cancelled.")
+            except AuthenticationError:
+                # Retrying cannot fix wrong credentials. Hand over to the
+                # reauth flow which reloads the entry once it succeeds.
+                _LOGGER.warning(
+                    "Authentication to Casambi network %s failed while reconnecting",
+                    self.address,
+                )
+                self.conf_entry.async_start_reauth(self.hass)
                 break
-            except ProtocolError as err:
-                # We retry once on Protocol errors to make sure they aren't permanent.
-                if not protocol_error:
+            except Exception as err:  # pylint: disable=broad-except
+                # Never let the reconnect loop die: a dead loop leaves the
+                # integration unavailable until the user reloads it. Retry
+                # a protocol error once quickly, then fall back to the
+                # maximum backoff for any persistent error.
+                if isinstance(err, ProtocolError) and not protocol_error:
                     _LOGGER.debug("Retrying once on protocol error.", exc_info=True)
                     protocol_error = True
                 else:
-                    raise HomeAssistantError from err
-            except Exception as err:  # pylint: disable=broad-except
-                raise HomeAssistantError from err
+                    if not unexpected_error_logged:
+                        _LOGGER.warning(
+                            "Unexpected error while reconnecting to %s, retrying "
+                            "every %s seconds",
+                            self.address,
+                            RECONNECT_BACKOFF_MAX,
+                            exc_info=True,
+                        )
+                        unexpected_error_logged = True
+                    else:
+                        _LOGGER.debug(
+                            "Unexpected error while reconnecting.", exc_info=True
+                        )
+                    backoff = RECONNECT_BACKOFF_MAX
 
             # Add jitter so multiple config entries don't retry in lockstep.
             await asyncio.sleep(backoff + random.uniform(0, 1))
