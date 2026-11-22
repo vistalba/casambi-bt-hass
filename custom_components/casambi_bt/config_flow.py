@@ -14,9 +14,15 @@ from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
     async_scanner_count,
 )
-from homeassistant.config_entries import ConfigEntryState, ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigEntryState,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.selector import (
@@ -54,6 +60,10 @@ BLUETOOTH_CONFIRM_SCHEMA: Final = vol.Schema(
 )
 
 PASSWORD_SCHEMA: Final = vol.Schema({vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR})
+
+OPTIONS_SCHEMA: Final = vol.Schema(
+    {vol.Required(CONF_IMPORT_GROUPS, default=True): BooleanSelector()}
+)
 
 
 def normalize_address(address: str) -> str:
@@ -104,11 +114,28 @@ async def _validate_input(hass: HomeAssistant, address: str, password: str) -> s
 class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Casambi Bluetooth."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> CasambiOptionsFlow:
+        """Create the options flow."""
+        return CasambiOptionsFlow()
+
+    @callback
+    def _async_create_casa_entry(
+        self, title: str, address: str, user_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Create the entry, keeping settings that don't affect the connection in options."""
+        return self.async_create_entry(
+            title=title,
+            data={CONF_ADDRESS: address, CONF_PASSWORD: user_input[CONF_PASSWORD]},
+            options={CONF_IMPORT_GROUPS: user_input[CONF_IMPORT_GROUPS]},
+        )
 
     async def _async_try_connect(
         self, address: str, password: str
@@ -189,9 +216,7 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
                 address, user_input[CONF_PASSWORD]
             )
             if title is not None:
-                return self.async_create_entry(
-                    title=title, data={CONF_ADDRESS: address, **user_input}
-                )
+                return self._async_create_casa_entry(title, address, user_input)
 
         return self.async_show_form(
             step_id="bluetooth_confirm",
@@ -222,9 +247,7 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
                     address, user_input[CONF_PASSWORD]
                 )
                 if title is not None:
-                    return self.async_create_entry(
-                        title=title, data={**user_input, CONF_ADDRESS: address}
-                    )
+                    return self._async_create_casa_entry(title, address, user_input)
 
         return self.async_show_form(
             step_id="user",
@@ -259,4 +282,22 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=PASSWORD_SCHEMA,
             description_placeholders={"name": entry.title},
             errors=errors,
+        )
+
+
+class CasambiOptionsFlow(OptionsFlowWithReload):
+    """Handle the options of a Casambi network."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                OPTIONS_SCHEMA, self.config_entry.options
+            ),
         )

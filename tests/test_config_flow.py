@@ -105,8 +105,8 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     assert result["data"] == {
         CONF_ADDRESS: TEST_ADDRESS,
         CONF_PASSWORD: "secret-password",
-        CONF_IMPORT_GROUPS: True,
     }
+    assert result["options"] == {CONF_IMPORT_GROUPS: True}
     assert result["result"].unique_id == TEST_ADDRESS
 
 
@@ -232,8 +232,8 @@ async def test_bluetooth_discovery(hass: HomeAssistant) -> None:
     assert result["data"] == {
         CONF_ADDRESS: TEST_ADDRESS,
         CONF_PASSWORD: "secret-password",
-        CONF_IMPORT_GROUPS: False,
     }
+    assert result["options"] == {CONF_IMPORT_GROUPS: False}
     assert result["result"].unique_id == TEST_ADDRESS
 
 
@@ -321,3 +321,30 @@ async def test_reauth_flow(
     assert config_entry.data[CONF_PASSWORD] == "new-password"
     assert config_entry.data[CONF_ADDRESS] == TEST_ADDRESS
     assert config_entry.state is ConfigEntryState.LOADED
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_options_flow_reloads(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Changing the options must store them and reload the entry."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert mock_casambi.connect.await_count == 1
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_IMPORT_GROUPS: True}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert config_entry.options == {CONF_IMPORT_GROUPS: True}
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert mock_casambi.connect.await_count == 2

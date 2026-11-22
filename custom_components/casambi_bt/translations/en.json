@@ -13,7 +13,7 @@
         "data_description": {
           "address": "Bluetooth MAC address of the Casambi network, e.g. AA:BB:CC:DD:EE:FF.",
           "password": "Password of the Casambi network, not of your Casambi account.",
-          "import_groups": "Create light entities for the groups of the network."
+          "import_groups": "Create light and number entities for the groups of the network."
         }
       },
       "bluetooth_confirm": {
@@ -50,6 +50,19 @@
       "bluetooth_error": "No connectable bluetooth adapter or proxy is available. Set up bluetooth in Home Assistant first.",
       "not_supported": "The discovered device does not accept connections.",
       "reauth_successful": "Re-authentication was successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Casambi network options",
+        "data": {
+          "import_groups": "Import groups"
+        },
+        "data_description": {
+          "import_groups": "Create light and number entities for the groups of the network. The integration reloads after a change."
+        }
+      }
     }
   }
 }
