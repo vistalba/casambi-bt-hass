@@ -282,8 +282,10 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
                 unit.unitType.get_control(UnitControlType.RGB)
                 and unit.unitType.get_control(UnitControlType.WHITE)
                 and unit.state is not None
+                and unit.state.rgb is not None
+                and unit.state.white is not None
             ):
-                return (*unit.state.rgb, unit.state.white)  # type: ignore[misc]
+                return (*unit.state.rgb, unit.state.white)
         return None
 
     @property
