@@ -55,7 +55,11 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     if not bt_device:
         raise NetworkNotFoundError
 
-    await casa.invalidateCache(bt_device.address)
+    # The library keys its cache directory by the mac without colons in
+    # lower case. Passing the raw address made this a silent no-op, so the
+    # flow reused a cached cloud session and never actually validated the
+    # entered password.
+    await casa.invalidateCache(bt_device.address.replace(":", "").lower())
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
     network_name = casa.networkName
