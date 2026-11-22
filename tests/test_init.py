@@ -13,7 +13,7 @@ from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 
 from .conftest import TEST_ADDRESS, TEST_UUID, MockCasambi, make_state, make_unit
 
@@ -246,3 +246,55 @@ async def test_setup_retry_network_not_found(
 
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
     assert "was not found" in config_entry.reason
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_no_connectable_scanner_creates_issue(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Without a connectable scanner a repair issue must guide the user."""
+    config_entry.add_to_hass(hass)
+    issue_id = f"no_connectable_scanner_{config_entry.entry_id}"
+    issue_registry = ir.async_get(hass)
+
+    with patch(
+        "homeassistant.components.bluetooth.async_scanner_count", return_value=0
+    ):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    mock_casambi.connect.assert_not_awaited()
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "no_connectable_scanner"
+    assert issue.translation_placeholders == {"address": TEST_ADDRESS}
+
+    # Once a scanner is available the setup succeeds and the issue is gone.
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_remove_entry_deletes_issue(
+    hass: HomeAssistant, config_entry: MockConfigEntry, tmp_path
+) -> None:
+    """Deleting the entry must remove its repair issue."""
+    hass.config.config_dir = str(tmp_path)
+    issue_id = f"no_connectable_scanner_{config_entry.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="no_connectable_scanner",
+    )
+
+    await async_remove_entry(hass, config_entry)
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None

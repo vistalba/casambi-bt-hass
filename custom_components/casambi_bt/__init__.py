@@ -28,7 +28,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
@@ -123,6 +123,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> 
         shutil.rmtree(cache_dir, ignore_errors=True)
 
     await hass.async_add_executor_job(_remove_cache)
+    ir.async_delete_issue(hass, DOMAIN, f"no_connectable_scanner_{entry.entry_id}")
 
 
 async def async_remove_config_entry_device(
@@ -178,8 +179,31 @@ class CasambiApi:
             bluetooth.BluetoothScanningMode.PASSIVE,
         )
 
+    @property
+    def _scanner_issue_id(self) -> str:
+        return f"no_connectable_scanner_{self.conf_entry.entry_id}"
+
     async def connect(self) -> None:
         """Connect initially to the Casmabi network."""
+        if bluetooth.async_scanner_count(self.hass, connectable=True) < 1:
+            # The user has to add an adapter or an active proxy; retrying
+            # alone can't fix this, so tell them in the repairs dashboard.
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._scanner_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="no_connectable_scanner",
+                translation_placeholders={"address": self.address},
+            )
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="network_not_found",
+                translation_placeholders={"address": self.address},
+            )
+        ir.async_delete_issue(self.hass, DOMAIN, self._scanner_issue_id)
+
         try:
             device = bluetooth.async_ble_device_from_address(
                 self.hass, self.address, connectable=True

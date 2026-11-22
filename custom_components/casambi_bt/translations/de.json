@@ -104,5 +104,11 @@
         "name": "Vertikal"
       }
     }
+  },
+  "issues": {
+    "no_connectable_scanner": {
+      "title": "Kein Bluetooth Adapter für Casambi",
+      "description": "Das Casambi Netzwerk {address} ist nicht erreichbar, weil Home Assistant keinen verbindungsfähigen Bluetooth Adapter oder Proxy hat. Füge einen lokalen Bluetooth Adapter oder einen aktiven Bluetooth Proxy hinzu. Die Integration verbindet sich automatisch, sobald einer verfügbar ist."
+    }
   }
 }
