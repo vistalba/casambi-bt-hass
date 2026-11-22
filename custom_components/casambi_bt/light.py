@@ -36,6 +36,7 @@ CASA_LIGHT_CTRL_TYPES: Final[list[UnitControlType]] = [
     UnitControlType.WHITE,
     UnitControlType.ONOFF,
     UnitControlType.TEMPERATURE,
+    UnitControlType.XY,
 ]
 
 _LOGGER = logging.getLogger(__name__)

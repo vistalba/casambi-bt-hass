@@ -441,3 +441,20 @@ async def test_white_only_unit_is_on_off_light(
     assert hass.states.get(entity_id).attributes["supported_color_modes"] == [
         ColorMode.ONOFF
     ]
+
+
+async def test_xy_only_unit_is_light(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A unit with only a xy color control must be added as light."""
+    unit = make_unit(1, [UnitControlType.XY])
+    mock_casambi.units = [unit]
+
+    await _setup(hass, config_entry)
+
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+    assert hass.states.get(entity_id).attributes["supported_color_modes"] == [
+        ColorMode.XY
+    ]
