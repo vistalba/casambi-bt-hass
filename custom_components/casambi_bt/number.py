@@ -1,6 +1,7 @@
 """Support for the vertical control of Casambi compatible lights."""
 
 from abc import ABCMeta
+from dataclasses import dataclass
 import logging
 from typing import cast
 
@@ -53,6 +54,7 @@ async def async_setup_entry(
     async_add_entities(light_entities + group_entities)
 
 
+@dataclass(frozen=True, kw_only=True)
 class TypedNumberEntityDescription(TypedEntityDescription, NumberEntityDescription):
     """Describes a CasambiVerticalNumberUnit."""
 
