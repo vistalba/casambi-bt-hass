@@ -1,5 +1,6 @@
 """Test integration setup and unload."""
 
+import importlib
 from unittest.mock import AsyncMock, patch
 
 from CasambiBt import UnitControlType
@@ -218,3 +219,10 @@ async def test_migrate_entry_from_future_version(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.MIGRATION_ERROR
+
+
+@pytest.mark.parametrize("platform", ["binary_sensor", "light", "number", "scene"])
+def test_parallel_updates_declared(platform: str) -> None:
+    """Every entity platform must declare its parallel updates."""
+    module = importlib.import_module(f"custom_components.casambi_bt.{platform}")
+    assert module.PARALLEL_UPDATES == 0
