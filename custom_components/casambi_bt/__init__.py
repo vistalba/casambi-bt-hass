@@ -253,6 +253,7 @@ class CasambiApi:
                         "Reconnect returned without a connection."
                     )
                 self._link_up = True
+                _LOGGER.info("Reconnected to Casambi network %s", self.address)
                 self._notify_connection_state()
                 break
             except BluetoothError:
@@ -405,6 +406,8 @@ class CasambiApi:
 
     @callback
     def _casa_disconnect(self) -> None:
+        if self._link_up:
+            _LOGGER.info("Lost connection to Casambi network %s", self.address)
         self._link_up = False
         self._notify_connection_state()
         self._schedule_reconnect()
