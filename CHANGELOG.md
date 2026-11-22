@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.0-beta10
+
+Requires Home Assistant 2026.8 or newer.
+
+### Fixes
+
+- **Groups of different lights were not added at all**, e.g. dimmers together with color lights. Home Assistant refused their combined color modes; they are now reduced to a valid set. Units with only a white channel are added as on/off lights instead of being dropped.
+- **Setting only a color on an off light left it off.** Units now switch on and restore their last level; off groups no longer get a level of 0 synced after the color.
+- **Reauth and reconfigure accepted a wrong password** while a cached cloud session was valid or the cloud was unreachable. The password is now always checked by the Casambi cloud, without touching the cache of the running network.
+- **No more login flood after rejected credentials:** every bluetooth advertisement triggered a new failing login until the reauth was done.
+- **Cloud rate limits (HTTP 403) are no longer treated as a wrong password:** setup retries later, the reconnect continues with backoff and the dialogs show a dedicated message.
+- Units with only a xy color control are added as lights.
+- The validation connection of the dialogs is always closed, even when cancelled (bluetooth proxies only have a few connection slots).
+- A failing cache migration no longer aborts the setup.
+- Values a light rejects fail the action with a clear message.
+
+### Security
+
+- Diagnostics no longer contain the bluetooth address of discovered networks (`discovery_keys`).
+- The cache with cloud session and network keys is only accessible to the Home Assistant user.
+- Cache paths are only derived from valid mac addresses; removing an entry can no longer delete files outside the cache.
+- The cloud's response body is no longer logged on failed logins.
+- The README no longer asks to post the library debug log, which contains the network keys.
+
+### Internal
+
+- Commands are sent through a typed method instead of a dynamic proxy, so mypy checks them.
+- Entities no longer write private fields of library objects.
+- Scene activations are logged at debug level; CI uses actions/checkout v5.
+- 125 tests (99 % coverage), including tests against the real login code of casambi-bt.
+
 ## 0.3.0-beta9
 
 Requires Home Assistant 2026.8 or newer.
