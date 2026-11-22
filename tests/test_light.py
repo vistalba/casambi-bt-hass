@@ -70,7 +70,7 @@ async def test_color_mode_follows_color_source(
 async def test_group_rgbw_without_state_values(
     hass: HomeAssistant,
     mock_casambi: MockCasambi,
-    config_entry: MockConfigEntry,
+    group_config_entry: MockConfigEntry,
 ) -> None:
     """A group of RGBW units without color values must not crash."""
     unit = make_unit(
@@ -80,14 +80,7 @@ async def test_group_rgbw_without_state_values(
     )
     mock_casambi.units = [unit]
     mock_casambi.groups = [Group(groudId=7, name="Living", units=[unit])]
-    config_entry = MockConfigEntry(
-        domain=config_entry.domain,
-        title=config_entry.title,
-        data={**config_entry.data, "import_groups": True},
-        unique_id=config_entry.unique_id,
-    )
-
-    await _setup(hass, config_entry)
+    await _setup(hass, group_config_entry)
 
     entity_id = _entity_id(hass, f"{mock_casambi.networkId}-group-7")
     state = hass.states.get(entity_id)
