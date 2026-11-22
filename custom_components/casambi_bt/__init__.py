@@ -200,21 +200,31 @@ class CasambiApi:
                 ) from err
             self._link_up = True
         except BluetoothError as err:
-            raise ConfigEntryNotReady("Failed to use bluetooth") from err
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="bluetooth_error",
+                translation_placeholders={"address": self.address},
+            ) from err
         except BluetoothDeviceNotFoundError as err:
             raise ConfigEntryNotReady(
-                f"Network with address {self.address} wasn't found"
+                translation_domain=DOMAIN,
+                translation_key="network_not_found",
+                translation_placeholders={"address": self.address},
             ) from err
         except AuthenticationError as err:
             raise ConfigEntryAuthFailed(
-                f"Failed to authenticate to network {self.address}"
+                translation_domain=DOMAIN,
+                translation_key="auth_failed",
+                translation_placeholders={"address": self.address},
             ) from err
         except Exception as err:  # pylint: disable=broad-except
             # Most failures here are transient (cloud hiccups, a network
             # update in progress, flaky bluetooth proxies). Retrying keeps
             # the entry alive instead of failing it until a manual reload.
             raise ConfigEntryNotReady(
-                f"Unexpected error creating network {self.address}"
+                translation_domain=DOMAIN,
+                translation_key="unexpected_error",
+                translation_placeholders={"address": self.address},
             ) from err
 
         # Only register bluetooth callback after connection.
@@ -511,7 +521,14 @@ class CasambiProxy:
                     # Don't swallow the error: the caller (service call)
                     # must learn that the command wasn't delivered.
                     raise HomeAssistantError(
-                        "Bluetooth communication failed. A reconnect was triggered."
+                        translation_domain=DOMAIN, translation_key="write_failed"
+                    ) from err
+                except CasambiBtError as err:
+                    # E.g. the connection is down and a reconnect is
+                    # already running. Report the failed action.
+                    _LOGGER.debug("Write failed.", exc_info=True)
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN, translation_key="write_failed"
                     ) from err
 
             return async_wrapper
