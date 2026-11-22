@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CasambiApi, CasambiConfigEntry
 from .const import CONF_IMPORT_GROUPS
-from .entities import (
+from .entity import (
     CasambiEntity,
     CasambiNetworkGroup,
     CasambiUnitEntity,

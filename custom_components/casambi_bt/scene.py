@@ -12,7 +12,7 @@ from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CasambiApi, CasambiConfigEntry
-from .entities import CasambiNetworkEntity
+from .entity import CasambiNetworkEntity
 
 _LOGGER = logging.getLogger(__name__)
 
