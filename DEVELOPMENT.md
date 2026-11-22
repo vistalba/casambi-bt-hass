@@ -15,6 +15,8 @@ ruff check .
 black . --check
 ```
 
+The integration has tests that can be run with `pip install -r requirements_test.txt` and `pytest`.
+
 For `casambi-bt` also run `mypy .`. All of these tools should be available when following the recommended setup procedure.
 
 ## Development setup
