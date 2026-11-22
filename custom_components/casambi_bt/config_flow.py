@@ -21,7 +21,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.httpx_client import get_async_client
 
-from . import get_cache_dir
+from . import get_cache_dir, get_cache_uuid
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,7 +55,8 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     if not bt_device:
         raise NetworkNotFoundError
 
-    await casa.invalidateCache(bt_device.address)
+    # Start from a clean cache so that a stale session can't be reused.
+    await casa.invalidateCache(get_cache_uuid(bt_device.address))
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
     network_name = casa.networkName
@@ -147,7 +148,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     info = await _validate_input(self.hass, user_input)
                 except NetworkNotFoundError:
                     errors["base"] = "cannot_connect"
-                except AuthenticationError:
+                except AuthenticationError as err:
+                    _LOGGER.warning("Authentication failed: %s", err)
                     errors["base"] = "invalid_auth"
                 except Exception:  # pylint: disable=broad-except
                     _LOGGER.exception("Unexpected exception")
@@ -196,7 +198,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await _validate_input(self.hass, data)
             except NetworkNotFoundError:
                 errors["base"] = "cannot_connect"
-            except AuthenticationError:
+            except AuthenticationError as err:
+                _LOGGER.warning("Authentication failed: %s", err)
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")

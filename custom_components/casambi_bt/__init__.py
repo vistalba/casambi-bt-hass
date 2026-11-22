@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable
 import inspect
 import logging
 from pathlib import Path
+import shutil
 from typing import Any, Final, cast
 
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
@@ -63,6 +64,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the cached network data when a config entry is removed."""
+    cache_entry = get_cache_dir(hass) / get_cache_uuid(entry.data[CONF_ADDRESS])
+    if await hass.async_add_executor_job(cache_entry.is_dir):
+        await hass.async_add_executor_job(shutil.rmtree, cache_entry, True)
+
+
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -79,6 +87,11 @@ def get_cache_dir(hass: HomeAssistant) -> Path:
     """Return the cache dir that should be used by CasambiBt."""
     conf_path = Path(hass.config.config_dir)
     return conf_path / ".storage" / DOMAIN
+
+
+def get_cache_uuid(address: str) -> str:
+    """Return the key CasambiBt uses for a network in its cache."""
+    return address.replace(":", "").lower()
 
 
 class CasambiApi:
