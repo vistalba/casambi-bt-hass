@@ -479,3 +479,22 @@ async def test_failed_cache_migration_does_not_block_setup(
         await hass.async_block_till_done()
 
     assert config_entry.state is ConfigEntryState.LOADED
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_setup_restricts_cache_permissions(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """The setup must restrict the cache and survive if that fails."""
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.casambi_bt.restrict_cache_permissions",
+        side_effect=PermissionError("not allowed"),
+    ) as restrict:
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    restrict.assert_called_once()
+    assert restrict.call_args.args[1] == TEST_UUID
+    assert config_entry.state is ConfigEntryState.LOADED

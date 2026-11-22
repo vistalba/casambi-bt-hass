@@ -43,7 +43,7 @@ from .const import (
     RECONNECT_BACKOFF_START,
     RECONNECT_BACKOFF_STEP,
 )
-from .migration import migrate_legacy_cache
+from .migration import migrate_legacy_cache, restrict_cache_permissions
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -72,6 +72,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
     entry.runtime_data = api
+
+    # The library creates the cache of the network while connecting.
+    try:
+        await hass.async_add_executor_job(
+            restrict_cache_permissions, get_cache_dir(hass), uuid
+        )
+    except OSError:
+        _LOGGER.warning("Could not restrict the casambi cache", exc_info=True)
 
     # Register the network (hub) device up front. Unit devices reference it
     # through via_device_id, which must resolve no matter in which order the
