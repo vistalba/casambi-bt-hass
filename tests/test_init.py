@@ -114,3 +114,26 @@ async def test_remove_entry_deletes_cache(
     await async_remove_entry(hass, config_entry)
 
     assert not cache_dir.exists()
+
+
+async def test_failed_unload_keeps_connection(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    mock_bluetooth: AsyncMock,
+    config_entry: MockConfigEntry,
+    enable_bluetooth: None,
+) -> None:
+    """A failed platform unload must not tear down the connection."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    with patch.object(
+        hass.config_entries,
+        "async_unload_platforms",
+        new=AsyncMock(return_value=False),
+    ):
+        assert not await hass.config_entries.async_unload(config_entry.entry_id)
+
+    mock_casambi.disconnect.assert_not_awaited()
+    assert mock_casambi.connected

@@ -69,11 +69,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    casa_api: CasambiApi = hass.data[DOMAIN][entry.entry_id]
-    await casa_api.disconnect()
-
+    # Keep the connection when a platform refused to unload. The entry stays
+    # loaded in that case and its remaining entities still need it.
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        casa_api: CasambiApi = hass.data[DOMAIN].pop(entry.entry_id)
+        await casa_api.disconnect()
 
     return unload_ok
 
