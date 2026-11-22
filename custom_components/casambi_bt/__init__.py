@@ -67,7 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
             translation_key="invalid_address",
             translation_placeholders={"address": entry.data[CONF_ADDRESS]},
         ) from err
-    await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
+    await async_migrate_cache(hass, uuid)
 
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
@@ -185,6 +185,21 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Allow removing a device that is no longer part of this Casambi network."""
     return not device_entry.identifiers & _live_identifiers(config_entry.runtime_data)
+
+
+async def async_migrate_cache(hass: HomeAssistant, uuid: str) -> None:
+    """Migrate the cache of older casambi-bt versions, if possible.
+
+    The migration only keeps the cloud session across the library upgrade.
+    If it fails (e.g. a read only or full disk), continue without it: the
+    library recreates its cache with a fresh cloud login.
+    """
+    try:
+        await hass.async_add_executor_job(
+            migrate_legacy_cache, get_cache_dir(hass), uuid
+        )
+    except OSError:
+        _LOGGER.warning("Could not migrate the casambi cache", exc_info=True)
 
 
 def cache_uuid(address: str) -> str:

@@ -462,3 +462,20 @@ async def test_setup_with_invalid_address_fails(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.SETUP_ERROR
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_failed_cache_migration_does_not_block_setup(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """A cache that can't be migrated must not prevent the setup."""
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.casambi_bt.migrate_legacy_cache",
+        side_effect=PermissionError("read only"),
+    ):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
