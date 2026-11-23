@@ -38,6 +38,7 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import (
+    COMMAND_TIMEOUT,
     CONF_IMPORT_GROUPS,
     CONNECT_TIMEOUT,
     DOMAIN,
@@ -490,7 +491,16 @@ class CasambiApi:
         swallowed: the action must learn that the command wasn't delivered.
         """
         try:
-            await command(*args, **kwargs)
+            async with asyncio.timeout(COMMAND_TIMEOUT):
+                await command(*args, **kwargs)
+        except TimeoutError as err:
+            # The library retries and reconnects internally. Don't let an
+            # action hang on a connection that doesn't come back.
+            _LOGGER.debug("Command timed out.", exc_info=True)
+            self._schedule_reconnect()
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="write_failed"
+            ) from err
         except BluetoothError as err:
             _LOGGER.debug("Bluetooth error during write.", exc_info=True)
             _LOGGER.info("Triggering reconnect after write failed.")
@@ -508,6 +518,13 @@ class CasambiApi:
             # The library validates values against the unit's controls.
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="invalid_value"
+            ) from err
+        except Exception as err:
+            # Anything else is a bug in the library or this integration. Fail
+            # the action with a clear error instead of an unhandled one.
+            _LOGGER.exception("Unexpected error while sending a command")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="write_failed"
             ) from err
 
     def diagnostics(self) -> dict[str, Any]:
