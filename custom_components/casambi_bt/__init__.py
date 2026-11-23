@@ -16,7 +16,10 @@ from CasambiBt.errors import (
     BluetoothDeviceNotFoundError,
     BluetoothError,
     CasambiBtError,
+    CloudUnavailableError,
+    NetworkOnlineUpdateNeededError,
     ProtocolError,
+    UnsupportedProtocolVersion,
 )
 
 from homeassistant.components import bluetooth
@@ -47,9 +50,9 @@ from .migration import migrate_legacy_cache, restrict_cache_permissions
 
 _LOGGER: Final = logging.getLogger(__name__)
 
-# casambi-bt reports the http status of a failed cloud login only in the
-# message of the AuthenticationError ("Login failed: <status>\n<body>").
-_LOGIN_STATUS_REGEX: Final = re.compile(r"Login failed: (\d{3})")
+# Statuses of the cloud that mean the stored password doesn't work anymore:
+# a rejected login (401) or a revoked session after a password change (410).
+_CREDENTIALS_REJECTED_STATUSES: Final = frozenset({401, 410})
 # The Casambi cloud answers 403 when it refuses new sessions for a while.
 _RATE_LIMIT_STATUSES: Final = frozenset({403, 429})
 _CACHE_UUID_REGEX: Final = re.compile(r"[0-9a-f]{12}")
@@ -223,16 +226,17 @@ def cache_uuid(address: str) -> str:
     return uuid
 
 
-def login_status(err: AuthenticationError) -> int | None:
-    """Return the http status of a failed cloud login, if known."""
-    if match := _LOGIN_STATUS_REGEX.match(str(err)):
-        return int(match.group(1))
-    return None
+def credentials_rejected(err: AuthenticationError) -> bool:
+    """Return True if the cloud rejected the stored credentials.
+
+    Other authentication errors are transient, e.g. a missing session.
+    """
+    return err.status_code in _CREDENTIALS_REJECTED_STATUSES
 
 
-def is_rate_limited(err: AuthenticationError) -> bool:
+def is_rate_limited(err: CloudUnavailableError) -> bool:
     """Return True if the cloud refused the login temporarily."""
-    return login_status(err) in _RATE_LIMIT_STATUSES
+    return err.status_code in _RATE_LIMIT_STATUSES
 
 
 def get_cache_dir(hass: HomeAssistant) -> Path:
@@ -336,17 +340,39 @@ class CasambiApi:
                 translation_placeholders={"address": self.address},
             ) from err
         except AuthenticationError as err:
-            if is_rate_limited(err):
-                # A rate limit says nothing about the password, so retry
-                # later instead of asking the user to re-authenticate.
-                raise ConfigEntryNotReady(
+            if credentials_rejected(err):
+                raise ConfigEntryAuthFailed(
                     translation_domain=DOMAIN,
-                    translation_key="rate_limited",
+                    translation_key="auth_failed",
                     translation_placeholders={"address": self.address},
                 ) from err
-            raise ConfigEntryAuthFailed(
+            raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
-                translation_key="auth_failed",
+                translation_key="unexpected_error",
+                translation_placeholders={"address": self.address},
+            ) from err
+        except CloudUnavailableError as err:
+            # Only reached without a cached configuration, e.g. after the
+            # cache was lost. A rate limit or an outage says nothing about
+            # the password, so retry later.
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key=(
+                    "rate_limited" if is_rate_limited(err) else "cloud_unavailable"
+                ),
+                translation_placeholders={"address": self.address},
+            ) from err
+        except NetworkOnlineUpdateNeededError as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="cloud_unavailable",
+                translation_placeholders={"address": self.address},
+            ) from err
+        except UnsupportedProtocolVersion as err:
+            # Retrying can't help. The library needs to support the network.
+            raise ConfigEntryError(
+                translation_domain=DOMAIN,
+                translation_key="unsupported_protocol",
                 translation_placeholders={"address": self.address},
             ) from err
         except Exception as err:  # pylint: disable=broad-except
@@ -406,7 +432,7 @@ class CasambiApi:
                 # We are still registered for HA notifications but retrying very seldomly should be fine.
                 backoff = max(backoff, 60)
             except AuthenticationError as err:
-                if not is_rate_limited(err):
+                if credentials_rejected(err):
                     # Retrying cannot fix wrong credentials. Hand over to the
                     # reauth flow which reloads the entry once it succeeds.
                     _LOGGER.warning(
@@ -417,7 +443,7 @@ class CasambiApi:
                     self._auth_failed = True
                     self.conf_entry.async_start_reauth(self.hass)
                     break
-                _LOGGER.debug("Login rate limited, retrying later.")
+                _LOGGER.debug("Authentication failed temporarily, retrying later.")
                 backoff = RECONNECT_BACKOFF_MAX
             except Exception as err:  # pylint: disable=broad-except
                 # Never let the reconnect loop die: a dead loop leaves the
