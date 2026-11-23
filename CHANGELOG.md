@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0-beta12
+
+### New
+
+- **Offline mode** (option under *Configure*): the network never contacts the Casambi cloud and runs from its cached configuration, without a password. Without the offline mode the password is required and changes from the Casambi app are applied automatically.
+- Restoring an offline backup preselects the offline mode. Turning it off requires the password, which is checked with the cloud.
+- A repair issue asks to restore an offline backup when a network in offline mode has no cached configuration.
+
+### Fixes
+
+- Networks set up from an offline backup without a password asked for the password after every cloud check. Such entries are switched to the offline mode automatically.
+
 ## 0.3.0-beta11
 
 Requires Home Assistant 2026.8 or newer and casambi-bt 0.5.0b1 from the fork `vistalba/casambi-bt` (installed automatically).
