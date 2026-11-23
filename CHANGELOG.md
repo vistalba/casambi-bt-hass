@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0-beta11
+
+Requires Home Assistant 2026.8 or newer and casambi-bt 0.5.0b1 from the fork `vistalba/casambi-bt` (installed automatically).
+
+### Offline operation
+
+- **The network starts from its cached configuration** and no longer needs the Casambi cloud for a restart. The cloud is checked in the background after the start and every 24 hours.
+- **Changes made in the Casambi app are applied automatically:** a changed configuration is downloaded and the integration reloads, adding new units and removing deleted ones.
+- **Offline backup:** the new action `casambi_bt.export_offline_backup` (administrators only) returns everything needed to run the network without the cloud, including its keys. Store it in a password manager.
+- **Setup from a backup:** adding the integration offers *Casambi cloud* or *Offline backup*. *Reconfigure* can restore a backup for a configured network.
+
+### Fixes
+
+- A Casambi cloud outage (e.g. HTTP 503) started a reauth flow. Only a rejected password does now; outages and rate limits retry later.
+- Commands are limited to 45 seconds and never leave an action hanging. Unexpected library errors fail the action with a clear message.
+- The legacy cache migration only runs for the cache version it was written for.
+- An unsupported protocol version fails the setup permanently instead of retrying forever.
+- Connection retries use the current bluetooth device, e.g. after a bluetooth proxy took over.
+
+### Library (casambi-bt 0.5.0b1)
+
+- Cloud errors other than a rejected password fall back to the cache; unit types are kept beyond their expiry while offline. Before, a restart without internet failed 28 days after the unit types were fetched, and any error answer of the cloud stopped the connect.
+- Units whose type can't be fetched are kept instead of disappearing for 7 days.
+- A parse error of one unit no longer drops the updates of others; unknown color sources no longer break the state.
+- The reconnect inside a command is limited to 30 seconds.
+- Rotated keys replace cached keys; a revoked session no longer deletes the whole cache.
+- The network configuration and the keys are no longer written to the debug log.
+- Classic networks: the sequence number skips 0 on wrap around.
+
 ## 0.3.0-beta10
 
 Requires Home Assistant 2026.8 or newer.
