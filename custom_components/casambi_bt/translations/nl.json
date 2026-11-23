@@ -108,6 +108,9 @@
     },
     "unsupported_protocol": {
       "message": "De protocolversie van het Casambi netwerk {address} wordt niet ondersteund door deze integratie."
+    },
+    "backup_failed": {
+      "message": "De offline back-up kon niet worden gemaakt."
     }
   },
   "entity": {
@@ -126,6 +129,18 @@
     "no_connectable_scanner": {
       "title": "Geen bluetooth adapter voor Casambi",
       "description": "Het Casambi netwerk {address} is niet bereikbaar omdat Home Assistant geen bluetooth adapter of proxy heeft die verbindingen ondersteunt. Voeg een lokale bluetooth adapter of een actieve bluetooth proxy toe. De integratie maakt automatisch verbinding zodra er een beschikbaar is."
+    }
+  },
+  "services": {
+    "export_offline_backup": {
+      "name": "Offline back-up exporteren",
+      "description": "Geeft alles terug om een Casambi netwerk zonder de Casambi cloud te gebruiken, inclusief de sleutels van het netwerk. Bewaar het antwoord als een wachtwoord, bijv. in je wachtwoordmanager.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Netwerk",
+          "description": "Het Casambi netwerk dat moet worden geëxporteerd."
+        }
+      }
     }
   }
 }
