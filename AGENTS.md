@@ -82,7 +82,8 @@ pytest
 - **Config flow.** Map library errors to the existing error keys
   (`cannot_connect`, `invalid_auth`, `unknown`) and log the cause, so that
   users can report it. Every new user-facing string goes into `strings.json`
-  and `translations/en.json`.
+  and `translations/en.json`. Also update the other translations (`de.json`,
+  `nl.json`) if you can translate reliably. Otherwise leave them unchanged.
 - **Logging.**
   - `debug` for details,
   - `info` for rare state changes (connect, reconnect),
