@@ -19,5 +19,5 @@
   "requirements": [
     "git+https://github.com/vistalba/casambi-bt@31e74e75a59f9bb8d9842f2b953100e130ee0e7c#casambi-bt==0.5.0b3"
   ],
-  "version": "0.3.0-beta13"
+  "version": "0.3.0-beta14"
 }
