@@ -10,10 +10,13 @@ from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 import json
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from bleak.backends.device import BLEDevice
+from bleak.exc import BleakError
 from CasambiBt import Casambi
+from CasambiBt._client import CasambiClientEvolution
+from CasambiBt._constants import ConnectionState
 import httpx
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -32,6 +35,10 @@ from .conftest import TEST_ADDRESS, TEST_UUID, drain
 
 NETWORK_ID = "net-1"
 PASSWORD = "right-password"
+
+# The cloud fixture replaces the bluetooth connection of the library. Tests
+# of the bluetooth handling put the real implementation back.
+_REAL_CONNECT_CLIENT = Casambi._connectClient  # noqa: SLF001
 FIXTURE = {
     "id": 42,
     "model": "Spot",
@@ -302,3 +309,120 @@ async def test_offline_mode_never_contacts_the_cloud(
     assert entry.state is ConfigEntryState.LOADED
     assert cloud.requests == []
     assert _unit_devices(hass, entry) == ["Lamp 1"]
+
+
+class FakeLink:
+    """Bluetooth links of the real casambi-bt client with a fake GATT client.
+
+    Only the BLE transport and the handshake are replaced. The connection
+    state machine, the error handling and the reconnect logic of the
+    library run as in production.
+    """
+
+    def __init__(self) -> None:
+        """Start without any link."""
+        self.gatts: list[MagicMock] = []
+
+    def new_gatt(self) -> MagicMock:
+        """Return the GATT client of a new, connected link."""
+        gatt = MagicMock()
+        gatt.is_connected = True
+        gatt.write_gatt_char = AsyncMock()
+        gatt.disconnect = AsyncMock()
+        self.gatts.append(gatt)
+        return gatt
+
+
+@pytest.fixture
+def link(cloud: FakeCloud) -> Generator[FakeLink]:
+    """Connect the real library client through a fake GATT client."""
+    fake = FakeLink()
+
+    async def connect(client: CasambiClientEvolution) -> None:
+        client._gattClient = fake.new_gatt()  # noqa: SLF001
+        client._connectionState = ConnectionState.CONNECTED  # noqa: SLF001
+
+    async def exchange_key(client: CasambiClientEvolution, retries: int = 2) -> None:
+        client._nonce = bytes(16)  # noqa: SLF001
+        client._encryptor = MagicMock()  # noqa: SLF001
+        client._encryptor.encryptThenMac.return_value = b"encrypted"  # noqa: SLF001
+        client._connectionState = ConnectionState.KEY_EXCHANGED  # noqa: SLF001
+
+    async def authenticate(client: CasambiClientEvolution) -> None:
+        client._connectionState = ConnectionState.AUTHENTICATED  # noqa: SLF001
+
+    with (
+        patch.object(Casambi, "_connectClient", _REAL_CONNECT_CLIENT),
+        patch.object(CasambiClientEvolution, "connect", connect),
+        patch.object(CasambiClientEvolution, "exchangeKey", exchange_key),
+        patch.object(CasambiClientEvolution, "authenticate", authenticate),
+    ):
+        yield fake
+
+
+def _light_entity_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
+
+    return next(
+        e.entity_id
+        for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        if e.domain == "light" and "-unit-" in e.unique_id
+    )
+
+
+async def test_lost_link_is_detected_on_write(
+    hass: HomeAssistant, link: FakeLink, entry: MockConfigEntry
+) -> None:
+    """A write on a link that dropped without a disconnect callback reconnects.
+
+    ESPHome proxies report such a write as "<device> is not connected".
+    The library must detect the lost link, tear the old client down and
+    reconnect, instead of keeping a dead connection that it still reports
+    as connected.
+    """
+    await _setup(hass, entry)
+    assert entry.state is ConfigEntryState.LOADED
+    assert len(link.gatts) == 1
+    # Units are online once the network reported their state.
+    api = entry.runtime_data
+    for unit in api.casa.units:
+        unit._online = True  # noqa: SLF001
+        api._unit_changed_handler(unit)  # noqa: SLF001
+    await hass.async_block_till_done()
+    dead = link.gatts[0]
+    dead.is_connected = False
+    dead.write_gatt_char.side_effect = BleakError(
+        f"Casambi Network - {TEST_ADDRESS} is not connected"
+    )
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": _light_entity_id(hass, entry)},
+        blocking=True,
+    )
+
+    # The old client was disconnected although its link was already down,
+    # so no stale state (e.g. BlueZ notify sessions) is left behind.
+    dead.disconnect.assert_awaited()
+    assert len(link.gatts) == 2
+    link.gatts[1].write_gatt_char.assert_awaited_once()
+    assert api.available
+
+
+async def test_disconnect_callback_reconnects(
+    hass: HomeAssistant, link: FakeLink, entry: MockConfigEntry
+) -> None:
+    """A disconnect reported by bleak leads to a new connection."""
+    await _setup(hass, entry)
+    api = entry.runtime_data
+    client = api.casa._casaClient  # noqa: SLF001
+    link.gatts[0].is_connected = False
+
+    client._on_disconnect(link.gatts[0])  # noqa: SLF001
+    assert not api.available
+    await drain(hass)
+
+    link.gatts[0].disconnect.assert_awaited()
+    assert len(link.gatts) == 2
+    assert api.available
