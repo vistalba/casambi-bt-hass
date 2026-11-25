@@ -324,6 +324,7 @@ class CasambiApi:
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
         self._connection_callbacks: list[Callable[[], None]] = []
+        self._network_callbacks: list[Callable[[], None]] = []
         # The library runs its disconnect callbacks while it still reports
         # itself as connected, so the link state is tracked here instead.
         self._link_up = False
@@ -354,9 +355,10 @@ class CasambiApi:
         """Check the Casambi cloud for a changed network configuration.
 
         The network runs from the cached configuration. A newer one is
-        downloaded into the cache and the entry is reloaded to apply it,
-        which adds new units and removes deleted ones. Without the cloud the
-        cached configuration simply stays in use.
+        downloaded into the cache. If it only adds units, groups or scenes,
+        they are added to the running entry (rule dynamic-devices). Any other
+        change is applied by reloading the entry, which also removes deleted
+        units. Without the cloud the cached configuration simply stays in use.
         """
         if self.offline or self._refreshing or self._auth_failed:
             return
@@ -387,12 +389,34 @@ class CasambiApi:
         finally:
             self._refreshing = False
 
-        if changed:
+        if not changed:
+            return
+
+        try:
+            additions = await self.casa.applyNetworkAdditions()
+        except Exception:
+            # Fall back to the reload, which applies any configuration.
+            _LOGGER.exception("Unexpected error while applying the network update")
+            additions = None
+
+        if additions is None:
             _LOGGER.info(
                 "The configuration of Casambi network %s changed, reloading",
                 self.address,
             )
             self.hass.config_entries.async_schedule_reload(self.conf_entry.entry_id)
+            return
+
+        if additions.units or additions.groups or additions.scenes:
+            _LOGGER.info(
+                "Added %i units, %i groups and %i scenes to Casambi network %s",
+                len(additions.units),
+                len(additions.groups),
+                len(additions.scenes),
+                self.address,
+            )
+            for c in list(self._network_callbacks):
+                c()
 
     @property
     def _scanner_issue_id(self) -> str:
@@ -787,6 +811,21 @@ class CasambiApi:
         def _unregister() -> None:
             with contextlib.suppress(ValueError):
                 self._connection_callbacks.remove(c)
+
+        return _unregister
+
+    def register_network_updates(self, c: Callable[[], None]) -> CALLBACK_TYPE:
+        """Register a callback for units, groups or scenes added at runtime.
+
+        :param c: The callback.
+        :return: A function that unregisters the callback.
+        """
+        self._network_callbacks.append(c)
+
+        @callback
+        def _unregister() -> None:
+            with contextlib.suppress(ValueError):
+                self._network_callbacks.remove(c)
 
         return _unregister
 

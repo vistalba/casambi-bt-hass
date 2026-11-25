@@ -3,6 +3,7 @@
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
+from CasambiBt import Group, NetworkAdditions, Scene, UnitControlType
 from CasambiBt.errors import (
     AuthenticationError,
     CloudUnavailableError,
@@ -14,11 +15,13 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from .conftest import MockCasambi, drain
+from .conftest import MockCasambi, drain, make_unit
 
 pytestmark = pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
 
@@ -122,3 +125,105 @@ async def test_refresh_does_not_overlap(
         await api.async_refresh_network()
 
     assert mock_casambi.refreshNetwork.await_count == calls
+
+
+def _entity_ids(hass: HomeAssistant, config_entry: MockConfigEntry) -> list[str]:
+    return sorted(
+        e.entity_id
+        for e in er.async_entries_for_config_entry(
+            er.async_get(hass), config_entry.entry_id
+        )
+    )
+
+
+@pytest.mark.parametrize("import_groups", [True, False])
+async def test_additions_are_added_without_reload(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+    import_groups: bool,
+) -> None:
+    """Units, groups and scenes added in the app get entities right away."""
+    config_entry = MockConfigEntry(
+        domain=config_entry.domain,
+        title=config_entry.title,
+        data=config_entry.data,
+        options={**config_entry.options, CONF_IMPORT_GROUPS: import_groups},
+        unique_id=config_entry.unique_id,
+        version=config_entry.version,
+        minor_version=config_entry.minor_version,
+    )
+    lamp = make_unit(1, [UnitControlType.DIMMER])
+    mock_casambi.units = [lamp]
+    mock_casambi.groups = [Group(1, "Group 1", [lamp])]
+    mock_casambi.scenes = [Scene(1, "Scene 1")]
+    await _setup(hass, config_entry)
+    before = _entity_ids(hass, config_entry)
+
+    new_lamp = make_unit(2, [UnitControlType.DIMMER, UnitControlType.VERTICAL])
+    new_group = Group(2, "Group 2", [lamp, new_lamp])
+    new_scene = Scene(2, "Scene 2")
+
+    async def _apply() -> NetworkAdditions:
+        mock_casambi.units.append(new_lamp)
+        mock_casambi.groups.append(new_group)
+        mock_casambi.scenes.append(new_scene)
+        return NetworkAdditions([new_lamp], [new_group], [new_scene])
+
+    mock_casambi.refreshNetwork = AsyncMock(return_value=True)
+    mock_casambi.applyNetworkAdditions = AsyncMock(side_effect=_apply)
+    await config_entry.runtime_data.async_refresh_network()
+    await drain(hass)
+
+    # No reload: the existing connection keeps running.
+    assert mock_casambi.connect.await_count == 1
+    added = sorted(set(_entity_ids(hass, config_entry)) - set(before))
+    expected = ["light.unit_2", "number.unit_2_vertical", "scene.test_network_scene_2"]
+    if import_groups:
+        expected += ["light.test_network_group_2", "number.test_network_group_2"]
+    assert added == sorted(expected)
+    assert set(before) <= set(_entity_ids(hass, config_entry))
+    devices = dr.async_entries_for_config_entry(
+        dr.async_get(hass), config_entry.entry_id
+    )
+    assert any((DOMAIN, new_lamp.uuid) in d.identifiers for d in devices)
+
+
+async def test_empty_additions_keep_running(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A newer revision without new objects neither reloads nor adds."""
+    mock_casambi.units = [make_unit(1, [UnitControlType.DIMMER])]
+    await _setup(hass, config_entry)
+    before = _entity_ids(hass, config_entry)
+
+    mock_casambi.refreshNetwork = AsyncMock(return_value=True)
+    mock_casambi.applyNetworkAdditions = AsyncMock(
+        return_value=NetworkAdditions([], [], [])
+    )
+    await config_entry.runtime_data.async_refresh_network()
+    await drain(hass)
+
+    assert mock_casambi.connect.await_count == 1
+    assert _entity_ids(hass, config_entry) == before
+
+
+async def test_failed_additions_reload_the_entry(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An error while applying the update falls back to a reload."""
+    await _setup(hass, config_entry)
+
+    mock_casambi.refreshNetwork = AsyncMock(side_effect=[True, False])
+    mock_casambi.applyNetworkAdditions = AsyncMock(side_effect=RuntimeError("bug"))
+    await config_entry.runtime_data.async_refresh_network()
+    await drain(hass)
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert mock_casambi.connect.await_count == 2
+    assert "Unexpected error while applying the network update" in caplog.text

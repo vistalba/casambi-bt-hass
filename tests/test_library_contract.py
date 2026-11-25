@@ -237,9 +237,15 @@ async def test_rejected_password_asks_for_the_password(
 async def test_new_units_are_added_by_the_refresh(
     hass: HomeAssistant, cloud: FakeCloud, entry: MockConfigEntry
 ) -> None:
-    """A unit added in the app appears after the next refresh."""
+    """A unit added in the app appears after the next refresh.
+
+    The entry isn't reloaded for that (rule dynamic-devices), so the
+    bluetooth connection stays up.
+    """
     await _setup(hass, entry)
     assert _unit_devices(hass, entry) == ["Lamp 1"]
+    connect_client: AsyncMock = Casambi._connectClient  # type: ignore[assignment]  # noqa: SLF001
+    assert connect_client.await_count == 1
 
     cloud.network = _network(revision=2, units=2)
     await entry.runtime_data.async_refresh_network()
@@ -247,6 +253,25 @@ async def test_new_units_are_added_by_the_refresh(
 
     assert entry.state is ConfigEntryState.LOADED
     assert _unit_devices(hass, entry) == ["Lamp 1", "Lamp 2"]
+    assert connect_client.await_count == 1
+
+
+async def test_removed_units_reload_the_entry(
+    hass: HomeAssistant, cloud: FakeCloud, entry: MockConfigEntry
+) -> None:
+    """Other changes than additions are applied by reloading the entry."""
+    cloud.network = _network(revision=1, units=2)
+    await _setup(hass, entry)
+    assert _unit_devices(hass, entry) == ["Lamp 1", "Lamp 2"]
+    connect_client: AsyncMock = Casambi._connectClient  # type: ignore[assignment]  # noqa: SLF001
+
+    cloud.network = _network(revision=2, units=1)
+    await entry.runtime_data.async_refresh_network()
+    await drain(hass)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert connect_client.await_count == 2
+    assert _unit_devices(hass, entry) == ["Lamp 1"]
 
 
 async def test_offline_backup_roundtrip(

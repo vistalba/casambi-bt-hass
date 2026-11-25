@@ -118,6 +118,7 @@ class MockCasambi:
         self.reconnect = AsyncMock(side_effect=self._reconnect)
         self.invalidateCache = AsyncMock()
         self.refreshNetwork = AsyncMock(return_value=False)
+        self.applyNetworkAdditions = AsyncMock(return_value=None)
         self.networkRevision = 1
         self.exportOfflineBackup = AsyncMock(return_value={"format": "test"})
         self.importOfflineBackup = AsyncMock(return_value="AA:BB:CC:DD:EE:FF")

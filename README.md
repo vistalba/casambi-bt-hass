@@ -68,7 +68,7 @@ Not supported yet:
 
 The integration keeps a bluetooth connection to the network and receives state changes as they happen (push). No polling is done. If the connection drops, it reconnects automatically with increasing delays and logs the loss and the recovery once at info level. All entities are unavailable while the connection is down.
 
-The configuration of the network (units, groups, scenes and the keys of the network) comes from the Casambi cloud and is cached. Home Assistant starts the network from this cache and checks the cloud in the background right after the start and every 24 hours. When the configuration changed in the Casambi app, the integration reloads by itself: new units appear and deleted ones are removed.
+The configuration of the network (units, groups, scenes and the keys of the network) comes from the Casambi cloud and is cached. Home Assistant starts the network from this cache and checks the cloud in the background right after the start and every 24 hours. Units, groups and scenes added in the Casambi app are added right away without interrupting the connection. Any other change (e.g. deleted or renamed units) makes the integration reload by itself, which also removes deleted units.
 
 ### Use cases and examples
 
@@ -78,7 +78,7 @@ The configuration of the network (units, groups, scenes and the keys of the netw
 
 ### Known limitations
 
-- Units and groups that are added or deleted in the Casambi app are applied within 24 hours (or at the next start) by an automatic reload, which needs the Casambi cloud.
+- Units, groups and scenes that are added or deleted in the Casambi app are applied within 24 hours (or at the next start), which needs the Casambi cloud. Deletions and other changes are applied by an automatic reload.
 - The first setup needs the Casambi cloud or an offline backup.
 - Group states are derived from the first unit with a matching control, so mixed groups may show the values of a single unit.
 - Only network configurations described in the casambi-bt documentation are supported (see *Network configuration*).

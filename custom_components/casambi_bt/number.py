@@ -7,7 +7,7 @@ import logging
 from CasambiBt import Group, Unit, UnitControlType
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CasambiApi, CasambiConfigEntry
@@ -33,24 +33,38 @@ async def async_setup_entry(
 ) -> None:
     """Create the Casambi vertical entity."""
     casa_api = config_entry.runtime_data
+    known_units: set[int] = set()
+    known_groups: set[int] = set()
 
-    light_entities: list[CasambiVerticalNumber] = [
-        CasambiVerticalNumberUnit(casa_api, u)
-        for u in casa_api.get_units([UnitControlType.VERTICAL])
-    ]
+    @callback
+    def _add_new_entities() -> None:
+        light_entities: list[CasambiVerticalNumber] = [
+            CasambiVerticalNumberUnit(casa_api, u)
+            for u in casa_api.get_units([UnitControlType.VERTICAL])
+            if u.deviceId not in known_units
+        ]
+        known_units.update(u.deviceId for u in casa_api.get_units())
 
-    group_entities: list[CasambiVerticalNumber] = []
-    if config_entry.options.get(CONF_IMPORT_GROUPS, True):
-        for g in casa_api.get_groups():
-            has_vert = False
-            for u in g.units:
-                if u.unitType.get_control(UnitControlType.VERTICAL) is not None:
-                    has_vert = True
-                    break
-            if has_vert:
-                group_entities.append(CasambiVerticalNumberGroup(casa_api, g))
+        group_entities: list[CasambiVerticalNumber] = []
+        if config_entry.options.get(CONF_IMPORT_GROUPS, True):
+            for g in casa_api.get_groups():
+                if g.groudId in known_groups:
+                    continue
+                has_vert = False
+                for u in g.units:
+                    if u.unitType.get_control(UnitControlType.VERTICAL) is not None:
+                        has_vert = True
+                        break
+                if has_vert:
+                    group_entities.append(CasambiVerticalNumberGroup(casa_api, g))
+        known_groups.update(g.groudId for g in casa_api.get_groups())
 
-    async_add_entities(light_entities + group_entities)
+        if light_entities or group_entities:
+            async_add_entities(light_entities + group_entities)
+
+    _add_new_entities()
+    # Units and groups added in the Casambi app (rule dynamic-devices).
+    config_entry.async_on_unload(casa_api.register_network_updates(_add_new_entities))
 
 
 @dataclass(frozen=True, kw_only=True)

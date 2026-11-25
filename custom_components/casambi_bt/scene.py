@@ -7,7 +7,7 @@ from CasambiBt import Scene
 
 from homeassistant.components.light import ATTR_BRIGHTNESS
 from homeassistant.components.scene import Scene as SceneEntity
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -28,9 +28,22 @@ async def async_setup_entry(
 ) -> None:
     """Create the Casambi scene entities."""
     casa_api = config_entry.runtime_data
+    known_scenes: set[int] = set()
 
-    scenes = [CasambiScene(casa_api, scene) for scene in casa_api.get_scenes()]
-    async_add_entities(scenes)
+    @callback
+    def _add_new_entities() -> None:
+        scenes = [
+            CasambiScene(casa_api, scene)
+            for scene in casa_api.get_scenes()
+            if scene.sceneId not in known_scenes
+        ]
+        known_scenes.update(scene.sceneId for scene in casa_api.get_scenes())
+        if scenes:
+            async_add_entities(scenes)
+
+    _add_new_entities()
+    # Scenes added in the Casambi app (rule dynamic-devices).
+    config_entry.async_on_unload(casa_api.register_network_updates(_add_new_entities))
 
 
 class CasambiScene(SceneEntity, CasambiNetworkEntity):

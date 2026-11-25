@@ -18,7 +18,7 @@ from homeassistant.components.light import (
     LightEntityFeature,
     filter_supported_color_modes,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CasambiApi, CasambiConfigEntry
@@ -88,20 +88,34 @@ async def async_setup_entry(
 ) -> None:
     """Create the Casambi light entities."""
     casa_api = config_entry.runtime_data
+    known_units: set[int] = set()
+    known_groups: set[int] = set()
 
-    light_entities: list[CasambiLight] = [
-        CasambiLightUnit(casa_api, u) for u in casa_api.get_units(CASA_LIGHT_CTRL_TYPES)
-    ]
-
-    group_entities: list[CasambiLight] = []
-    if config_entry.options.get(CONF_IMPORT_GROUPS, True):
-        group_entities = [
-            CasambiLightGroup(casa_api, g)
-            for g in casa_api.get_groups()
-            if any(is_light_unit(u) for u in g.units)
+    @callback
+    def _add_new_entities() -> None:
+        light_entities: list[CasambiLight] = [
+            CasambiLightUnit(casa_api, u)
+            for u in casa_api.get_units(CASA_LIGHT_CTRL_TYPES)
+            if u.deviceId not in known_units
         ]
+        known_units.update(u.deviceId for u in casa_api.get_units())
 
-    async_add_entities(light_entities + group_entities)
+        group_entities: list[CasambiLight] = []
+        if config_entry.options.get(CONF_IMPORT_GROUPS, True):
+            group_entities = [
+                CasambiLightGroup(casa_api, g)
+                for g in casa_api.get_groups()
+                if g.groudId not in known_groups
+                and any(is_light_unit(u) for u in g.units)
+            ]
+        known_groups.update(g.groudId for g in casa_api.get_groups())
+
+        if light_entities or group_entities:
+            async_add_entities(light_entities + group_entities)
+
+    _add_new_entities()
+    # Units and groups added in the Casambi app (rule dynamic-devices).
+    config_entry.async_on_unload(casa_api.register_network_updates(_add_new_entities))
 
 
 class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
