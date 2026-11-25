@@ -12,7 +12,10 @@ rules:
   config-flow: done
   dependency-transparency:
     status: todo
-    comment: casambi-bt has no tagged releases built and published in public CI yet.
+    comment: >-
+      The pinned casambi-bt build comes from a version tag of the fork
+      vistalba/casambi-bt and is built in its public CI, but it isn't
+      published on PyPI. Done once lkempf/casambi-bt releases it on PyPI.
   docs-actions: done
   docs-conditions:
     status: exempt
